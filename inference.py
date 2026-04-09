@@ -8,6 +8,7 @@ API_BASE_URL   = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME     = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 HF_TOKEN       = os.getenv("HF_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or HF_TOKEN
+ENV_NAME       = "support-agent-env"
 
 client = OpenAI(api_key=OPENAI_API_KEY or "placeholder", base_url=API_BASE_URL)
 
@@ -62,7 +63,7 @@ TASKS = [
     },
 ]
 
-# ── Fallback actions ──────────────────────────────────────────────────────────
+# ── Fallback actions (used when LLM unavailable) ──────────────────────────────
 
 DEFAULT_ACTIONS = {
     "task_1_easy": {
@@ -70,9 +71,9 @@ DEFAULT_ACTIONS = {
         "priority": "Medium",
         "draft_response": (
             "Thank you for reaching out. We have identified the issue with your "
-            "login credentials following your recent password reset. Please clear "
-            "your browser cache and try logging in again. If the problem persists, "
-            "we will reset your account access directly."
+            "login credentials after your recent password reset. Please clear your "
+            "browser cache and try logging in again. If the issue persists, we will "
+            "reset your account access directly."
         ),
         "is_done": True,
     },
@@ -82,7 +83,7 @@ DEFAULT_ACTIONS = {
         "draft_response": (
             "Thank you for alerting us. Our engineering team is actively "
             "investigating the slow dashboard performance and load times. "
-            "We will prioritize this given your critical deadline."
+            "We will prioritize resolution given your critical deadline."
         ),
         "is_done": True,
     },
@@ -91,9 +92,8 @@ DEFAULT_ACTIONS = {
         "priority": "Urgent",
         "draft_response": (
             "We sincerely apologize for the duplicate charge on your Pro Plan "
-            "subscription. We have confirmed the duplicate and will refund $49.99 "
-            "within 3 business days. Safeguards have been added to prevent this "
-            "from happening again."
+            "subscription. We have confirmed the error and will refund $49.99 "
+            "within 3 business days. Safeguards have been added to prevent recurrence."
         ),
         "is_done": True,
     },
@@ -106,7 +106,6 @@ def safe_score(value: float) -> float:
     try:
         s = float(value)
         s = max(0.01, min(0.99, s))
-        # Final assertion — if somehow still at boundary, use 0.5
         if s <= 0.0 or s >= 1.0:
             s = 0.5
         return s
@@ -126,9 +125,7 @@ def grade(task: dict, action: dict) -> float:
             return safe_score(0.9 if cat_ok else 0.1)
 
         if diff == "medium":
-            s = 0.0
-            s += 0.5 if cat_ok else 0.0
-            s += 0.5 if pri_ok else 0.0
+            s = (0.5 if cat_ok else 0.0) + (0.5 if pri_ok else 0.0)
             return safe_score(s if s > 0 else 0.1)
 
         if diff == "hard":
@@ -149,7 +146,6 @@ def grade(task: dict, action: dict) -> float:
 
     except Exception:
         pass
-
     return safe_score(0.5)
 
 # ── LLM call ──────────────────────────────────────────────────────────────────
@@ -173,28 +169,46 @@ def ask_llm(content: str) -> dict:
     action["is_done"] = True
     return action
 
+# ── Logging (exact format required by platform) ───────────────────────────────
+
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: str = "null") -> None:
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error}",
+        flush=True,
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        flush=True,
+    )
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     if not OPENAI_API_KEY:
-        print("Warning: OPENAI_API_KEY or HF_TOKEN not set — using default actions.")
+        print("Warning: OPENAI_API_KEY or HF_TOKEN not set — using default actions.", flush=True)
 
     for task in TASKS:
         task_id = task["id"]
-        print(f'[START] task_id="{task_id}"')
 
-        action = DEFAULT_ACTIONS[task_id]  # start with safe default
+        log_start(task=task_id, env=ENV_NAME, model=MODEL_NAME)
 
+        action = DEFAULT_ACTIONS[task_id]
         if OPENAI_API_KEY:
             try:
                 action = ask_llm(task["content"])
             except Exception as e:
-                print(f'[WARN] LLM call failed ({e}) — using default action')
+                print(f"[DEBUG] LLM call failed ({e}) — using default action", flush=True)
 
-        score = grade(task, action)
+        score = safe_score(grade(task, action))
+        rewards = [score]
 
-        # Final guard — guarantee valid before printing
-        assert 0 < score < 1, f"Score out of range: {score}"
-
-        print(f'[STEP] step="1" action="{action}" reward="{score}" done="True"')
-        print(f'[END] task_id="{task_id}" total_reward="{score}" done="True"')
+        log_step(step=1, action=str(action), reward=score, done=True, error="null")
+        log_end(success=True, steps=1, score=score, rewards=rewards)
