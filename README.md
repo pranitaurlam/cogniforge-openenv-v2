@@ -1,3 +1,14 @@
+---
+title: Support Agent OpenEnv
+emoji: 🎧
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+tags:
+  - openenv
+---
+
 # Support Agent OpenEnv
 
 A real-world OpenEnv environment that simulates a customer support agent workflow. The agent must categorize, prioritize, and draft responses for incoming support tickets.
