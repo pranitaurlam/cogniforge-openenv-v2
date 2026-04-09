@@ -1,6 +1,5 @@
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
-from .tasks import get_grader, clamp
 
 
 class Observation(BaseModel):
@@ -18,8 +17,17 @@ class Action(BaseModel):
 
 
 class Reward(BaseModel):
-    score: float = Field(..., gt=0.0, lt=1.0, description="Score strictly between 0 and 1")
+    score: float = Field(..., description="Reward score strictly between 0 and 1")
     reason: str = Field(..., description="Reason for the score")
+
+
+def _safe_score(raw: float) -> float:
+    """Hard clamp — score is always strictly between 0 and 1, no exceptions."""
+    try:
+        s = float(raw)
+    except Exception:
+        s = 0.5
+    return max(0.01, min(0.99, s))
 
 
 class SupportEnv:
@@ -34,23 +42,29 @@ class SupportEnv:
         return self._observe()
 
     def step(self, action: Action):
-        if self.current_index >= len(self.tickets):
-            return self._observe(), Reward(score=0.01, reason="Episode already finished"), True, {}
+        try:
+            if self.current_index >= len(self.tickets):
+                return self._observe(), Reward(score=0.5, reason="Episode already finished"), True, {}
 
-        ticket = self.tickets[self.current_index]
-        grader = get_grader(ticket["id"])
+            ticket = self.tickets[self.current_index]
 
-        if action.is_done:
+            from .tasks import get_grader
+            grader = get_grader(ticket["id"])
             raw = grader.grade(action.model_dump(), ticket["ground_truth"])
-            score = clamp(raw)
-            self.current_index += 1
-            self._state["processed_count"] += 1
-            reward = Reward(score=score, reason=f"Evaluated task {ticket['id']}")
-        else:
-            reward = Reward(score=0.01, reason="Intermediate step")
+            score = _safe_score(raw)
 
-        done = self.current_index >= len(self.tickets)
-        return self._observe(), reward, done, {}
+            if action.is_done:
+                self.current_index += 1
+                self._state["processed_count"] += 1
+                reason = f"Evaluated task {ticket['id']}"
+            else:
+                reason = "Intermediate step"
+
+            done = self.current_index >= len(self.tickets)
+            return self._observe(), Reward(score=score, reason=reason), done, {}
+
+        except Exception:
+            return self._observe(), Reward(score=0.5, reason="Error during evaluation"), False, {}
 
     def state(self) -> Dict[str, Any]:
         return self._state

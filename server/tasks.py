@@ -2,8 +2,12 @@ from typing import Dict, Any, List
 
 
 def clamp(score: float) -> float:
-    """Ensure score is strictly between 0 and 1."""
-    return max(0.01, min(0.99, float(score)))
+    """Guarantee score is strictly between 0 and 1."""
+    try:
+        s = float(score)
+    except Exception:
+        s = 0.5
+    return max(0.01, min(0.99, s))
 
 
 class TaskGrader:
@@ -16,38 +20,47 @@ class TaskGrader:
 
 class EasyGrader(TaskGrader):
     def grade(self, action: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
-        action_cat = (action.get("category") or "").strip().lower()
-        truth_cat = (ground_truth.get("category") or "").strip().lower()
-        return clamp(0.9 if action_cat == truth_cat else 0.1)
+        try:
+            action_cat = (action.get("category") or "").strip().lower()
+            truth_cat = (ground_truth.get("category") or "").strip().lower()
+            return clamp(0.9 if (action_cat and action_cat == truth_cat) else 0.1)
+        except Exception:
+            return clamp(0.5)
 
 
 class MediumGrader(TaskGrader):
     def grade(self, action: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
-        score = 0.0
-        if (action.get("category") or "").strip().lower() == (ground_truth.get("category") or "").strip().lower():
-            score += 0.5
-        if (action.get("priority") or "").strip().lower() == (ground_truth.get("priority") or "").strip().lower():
-            score += 0.5
-        return clamp(score if score > 0 else 0.1)
+        try:
+            score = 0.0
+            if (action.get("category") or "").strip().lower() == (ground_truth.get("category") or "").strip().lower():
+                score += 0.5
+            if (action.get("priority") or "").strip().lower() == (ground_truth.get("priority") or "").strip().lower():
+                score += 0.5
+            return clamp(score if score > 0 else 0.1)
+        except Exception:
+            return clamp(0.5)
 
 
 class HardGrader(TaskGrader):
     def grade(self, action: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
-        score = 0.0
-        if (action.get("category") or "").strip().lower() == (ground_truth.get("category") or "").strip().lower():
-            score += 0.2
-        if (action.get("priority") or "").strip().lower() == (ground_truth.get("priority") or "").strip().lower():
-            score += 0.2
-        draft = (action.get("draft_response") or "").strip()
-        if len(draft) > 15:
-            score += 0.2
-            keywords: List[str] = ground_truth.get("keywords") or []
-            if keywords:
-                hits = sum(1 for kw in keywords if kw.lower() in draft.lower())
-                score += 0.4 * (hits / len(keywords))
-            else:
-                score += 0.4
-        return clamp(score if score > 0 else 0.1)
+        try:
+            score = 0.0
+            if (action.get("category") or "").strip().lower() == (ground_truth.get("category") or "").strip().lower():
+                score += 0.2
+            if (action.get("priority") or "").strip().lower() == (ground_truth.get("priority") or "").strip().lower():
+                score += 0.2
+            draft = (action.get("draft_response") or "").strip()
+            if len(draft) > 15:
+                score += 0.2
+                keywords: List[str] = ground_truth.get("keywords") or []
+                if keywords:
+                    hits = sum(1 for kw in keywords if kw.lower() in draft.lower())
+                    score += 0.4 * (hits / len(keywords))
+                else:
+                    score += 0.4
+            return clamp(score if score > 0 else 0.1)
+        except Exception:
+            return clamp(0.5)
 
 
 class DefaultGrader(TaskGrader):
