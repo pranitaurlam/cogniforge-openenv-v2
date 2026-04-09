@@ -1,0 +1,25 @@
+name: support-agent-env
+version: 1.0.0
+description: A real-world environment simulating customer support agent workflows including ticket categorization, prioritization, and response drafting.
+author: Urlam Pranita
+task_type: customer-support-automation
+tags: [openenv, customer-support, llm-agent, automation]
+observation_space:
+  type: typed-pydantic
+  model: Observation
+action_space:
+  type: typed-pydantic
+  model: Action
+reward_space:
+  type: typed-pydantic
+  model: Reward
+tasks:
+  - id: task_1_easy
+    difficulty: easy
+    description: Handle a login credential issue by identifying the correct category.
+  - id: task_2_medium
+    difficulty: medium
+    description: Triage a high-priority technical performance issue with a tight deadline.
+  - id: task_3_hard
+    difficulty: hard
+    description: Resolve a billing dispute by drafting a professional refund response with keyword accuracy.

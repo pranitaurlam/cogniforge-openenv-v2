@@ -1,0 +1,23 @@
+[project]
+name = "support-agent-env"
+version = "1.0.0"
+description = "OpenEnv Customer Support Environment"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pyyaml",
+    "openai",
+    "requests",
+]
+requires-python = ">=3.10"
+
+[project.scripts]
+server = "server.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
